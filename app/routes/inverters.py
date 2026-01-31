@@ -15,6 +15,7 @@ from app.models.reading import InverterReading, InverterReadingRead
 from app.handlers.ingestion import (
     create_inverter,
     ingest_readings,
+    ingest_readings_stream,
     get_inverter,
     get_inverters,
     get_inverter_readings
@@ -82,37 +83,32 @@ async def ingest_inverter_readings(
         )
     
     try:
-        # Read file contents
-        contents = await file.read()
-        text_stream = io.StringIO(contents.decode('utf-8'))
-        
-        # Parse CSV
+        # Stream-parse CSV from the uploaded file to avoid loading whole file into memory.
+        # Use the underlying file buffer and a TextIOWrapper for line-by-line parsing.
+        file.file.seek(0)
+        text_stream = io.TextIOWrapper(file.file, encoding="utf-8")
         reader = csv.DictReader(text_stream)
-        readings = []
-        
-        for row_num, row in enumerate(reader, start=2):  # start=2 to account for header
-            try:
-                readings.append({
-                    "inverter_id": inverter_id,
-                    "timestamp": row.get("timestamp", "").strip(),
-                    "kwh": float(row.get("kwh", 0))
-                })
-            except ValueError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid data in row {row_num}: {str(e)}"
-                )
-        
-        if not readings:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="CSV file is empty or has no valid rows"
-            )
-        
-        # Ingest the parsed readings
-        created_readings = await ingest_readings(session, readings)
+
+        def rows_generator():
+            for row_num, row in enumerate(reader, start=2):
+                if not row:
+                    continue
+                try:
+                    yield {
+                        "inverter_id": inverter_id,
+                        "timestamp": row.get("timestamp", "").strip(),
+                        "kwh": float(row.get("kwh", 0))
+                    }
+                except ValueError as e:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid data in row {row_num}: {str(e)}"
+                    )
+
+        # Use the streaming ingest handler which commits in batches
+        created_readings = await ingest_readings_stream(session, rows_generator())
         return created_readings
-        
+
     except HTTPException:
         raise
     except Exception as e:
