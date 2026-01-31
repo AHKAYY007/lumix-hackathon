@@ -2,6 +2,8 @@
 
 Digital MRV (Measurement, Reporting, and Verification) engine for carbon credits.
 
+> 📊 **Dashboard**: Check out the [Streamlit Dashboard](./streamlit_app/README.md) for a web-based interface to manage inverters and carbon credits.
+
 ## Overview
 
 This backend system ingests solar inverter kWh data, verifies it against NASA POWER satellite irradiance data, calculates daily avoided CO2 emissions, detects fraud, and exposes all data via async FastAPI endpoints.
@@ -54,7 +56,7 @@ uv sync
 
 3. Run the application:
 ```bash
-uv run uvicorn app.main:app --reload
+uv run uvicorn main:app --reload
 ```
 
 4. Access API docs at: http://localhost:8000/docs
